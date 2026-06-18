@@ -21,6 +21,7 @@ import pickle, gc, warnings
 from collections import defaultdict
 from datetime import timedelta
 from catboost import CatBoost, Pool
+from gensim.models import Word2Vec as W2V
 
 from config import (
     DATA_DIR, PROCESSED_DIR, OUTPUT_DIR,
@@ -67,6 +68,23 @@ with timer("读取数据"):
         user_hist = pickle.load(f)
     with open(f"{PROCESSED_DIR}/val_candidates.pkl", "rb") as f:
         candidates = pickle.load(f)
+
+# Word2Vec 语义候选扩展
+w2v_model_path = f"{OUTPUT_DIR}/word2vec_article.model"
+if os.path.exists(w2v_model_path):
+    w2v_model = W2V.load(w2v_model_path)
+    print(f"  Word2Vec 词表大小: {len(w2v_model.wv):,}")
+    art_pop_val = art_feat.set_index("article_id")["popularity_score"].to_dict()
+    val_users = sorted(set(candidates.keys()))
+    candidates_orig = candidates
+    candidates = generate_candidates(user_hist, item_sim, art_pop_val, val_users, w2v_model=w2v_model)
+    n_orig = sum(len(v) for v in candidates_orig.values())
+    n_exp = sum(len(v) for v in candidates.values())
+    print(f"  原始候选集: {n_orig:,}  /  扩展后: {n_exp:,}  (+{(n_exp-n_orig)/n_orig*100:.1f}%)")
+    del candidates_orig, art_pop_val, val_users; gc.collect()
+else:
+    print("  Word2Vec 模型未找到, 跳过语义候选扩展")
+    w2v_model = None
 
 print(f"  val_txn: {val_txn['t_dat'].min().date()} ~ {val_txn['t_dat'].max().date()}")
 
@@ -167,6 +185,30 @@ def prepare_ltr_cat(ltr_df):
         start = end
 
     return X, y, group_id, ltr_df
+
+
+# 全量候选生成 (同 step6 的候选逻辑)
+def generate_candidates(user_hist, item_sim, art_pop, customers,
+                        n_hist=12, n_pop=12, w2v_model=None, n_w2v=5):
+    pop_list = sorted(art_pop, key=lambda x: -art_pop[x])[:n_pop]
+    out = {}
+    for cid in customers:
+        cands = set()
+        for aid in user_hist.get(cid, [])[:n_hist]:
+            cands.add(aid)
+        for aid in user_hist.get(cid, [])[:5]:
+            if aid in item_sim:
+                for rel, _ in item_sim[aid][:10]:
+                    cands.add(rel)
+        if w2v_model is not None:
+            for aid in user_hist.get(cid, [])[:5]:
+                if aid in w2v_model.wv:
+                    for sim_aid, _ in w2v_model.wv.most_similar(aid, topn=n_w2v):
+                        cands.add(sim_aid)
+        for aid in pop_list:
+            cands.add(aid)
+        out[cid] = list(cands)
+    return out
 
 
 # ============================================================
@@ -348,7 +390,7 @@ print(f"  提交用户: {len(sub_cids):,}  冷启动: {len(sub_cold):,} "
 
 
 def generate_candidates(user_hist, item_sim, art_pop, customers,
-                        n_hist=12, n_pop=12):
+                        n_hist=12, n_pop=12, w2v_model=None, n_w2v=5):
     pop_list = sorted(art_pop, key=lambda x: -art_pop[x])[:n_pop]
     out = {}
     for cid in customers:
@@ -359,6 +401,11 @@ def generate_candidates(user_hist, item_sim, art_pop, customers,
             if aid in item_sim:
                 for rel, _ in item_sim[aid][:10]:
                     cands.add(rel)
+        if w2v_model is not None:
+            for aid in user_hist.get(cid, [])[:5]:
+                if aid in w2v_model.wv:
+                    for sim_aid, _ in w2v_model.wv.most_similar(aid, topn=n_w2v):
+                        cands.add(sim_aid)
         for aid in pop_list:
             cands.add(aid)
         out[cid] = list(cands)
@@ -366,9 +413,11 @@ def generate_candidates(user_hist, item_sim, art_pop, customers,
 
 
 with timer("全量候选生成"):
-    cands_full = generate_candidates(user_hist_full, item_sim_full, art_pop_full, sub_cids)
+    cands_full = generate_candidates(user_hist_full, item_sim_full, art_pop_full, sub_cids, w2v_model=w2v_model)
     tot = sum(len(v) for v in cands_full.values())
     print(f"  候选: {len(cands_full):,} 用户, 平均 {tot/len(cands_full):.1f} 候选/用户")
+
+del w2v_model; gc.collect()
 
 all_preds = {}
 with timer(f"分批推理 (batch={INFER_BATCH_SIZE})"):
