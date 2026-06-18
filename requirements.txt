@@ -19,8 +19,7 @@ scipy>=1.10.0
 joblib>=1.2.0
 
 # 可选: 文本嵌入 TF-IDF 相关 (sklearn 已包含)
-# 可选: CatBoost (如需 YetiRank 排序)
-# catboost>=1.2.0
+catboost>=1.2.0
 
 # 可选: Word2Vec 语义召回
 # gensim>=4.3.0
