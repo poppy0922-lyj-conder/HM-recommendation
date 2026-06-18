@@ -1,0 +1,26 @@
+# ============================================================
+# H&M 个性化推荐系统 — 环境依赖
+# 使用方法: pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# ============================================================
+
+# 数据处理
+pandas>=1.5.0
+numpy>=1.24.0
+polars>=0.18.0
+scikit-learn>=1.2.0
+
+# 机器学习
+lightgbm>=4.0.0
+
+# 文本处理
+scipy>=1.10.0
+
+# 序列化
+joblib>=1.2.0
+
+# 可选: 文本嵌入 TF-IDF 相关 (sklearn 已包含)
+# 可选: CatBoost (如需 YetiRank 排序)
+# catboost>=1.2.0
+
+# 可选: Word2Vec 语义召回
+# gensim>=4.3.0
