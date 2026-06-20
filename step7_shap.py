@@ -31,11 +31,10 @@ from matplotlib import rcParams
 rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 rcParams['axes.unicode_minus'] = False
 
-from config import DATA_DIR, PROCESSED_DIR, LGB_PARAMS
+from config import DATA_DIR, PROCESSED_DIR, OUTPUT_DIR, LGB_PARAMS
 from utils import timer
 
-OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
-FIG_DIR = f"{OUTPUT_DIR}/figures"
+FIG_DIR = f"{os.path.dirname(os.path.abspath(__file__))}/figures"
 os.makedirs(FIG_DIR, exist_ok=True)
 
 warnings.filterwarnings("ignore")
@@ -140,12 +139,10 @@ if os.path.exists(phase0_model_path):
              if aid in w2v_model.wv}
     default_vec = np.zeros(args.vector_size, dtype=np.float32)
 
-    # 追加 a2v 嵌入到 art_feat
+    # 追加 a2v 嵌入到 art_feat (向量化, 避免 lambda 闭包问题)
+    a2v_mat = np.array([art2v.get(aid, default_vec) for aid in art_feat["article_id"]], dtype=np.float32)
     for i in range(args.vector_size):
-        col = f"a2v_{i}"
-        art_feat[col] = art_feat["article_id"].map(
-            lambda x, i=i: art2v.get(x, default_vec)[i]
-        ).astype(np.float32)
+        art_feat[f"a2v_{i}"] = a2v_mat[:, i]
     print(f"  商品嵌入覆盖率: {len(art2v)}/{len(art_feat)} ({len(art2v)/len(art_feat)*100:.1f}%)")
 else:
     print("\n  [警告] 未找到 Word2Vec 模型, a2v 嵌入将全为 0")
@@ -176,9 +173,13 @@ def build_ltr_data_simple(candidates, labels, cus_feat_df, art_feat_df,
             rows.append((cid, aid, 1 if aid in actual else 0))
     df = pd.DataFrame(rows, columns=["customer_id", "article_id", "label"])
 
-    feat_art_cols = [c for c in (ART_COLS + ["article_id"] + A2V_COLS) if c in art_feat_df.columns]
-    df = df.merge(cus_feat_df[CUS_COLS + ["customer_id"]], on="customer_id", how="left")
-    df = df.merge(art_feat_df[feat_art_cols], on="article_id", how="left")
+    # price_match 需要 avg_price 和 avg_price_user（即使不在特征列中）
+    merge_art_cols = list(set(ART_COLS + ["article_id"] + A2V_COLS + ["avg_price"]))
+    merge_art_cols = [c for c in merge_art_cols if c in art_feat_df.columns]
+    merge_cus_cols = list(set(CUS_COLS + ["customer_id"] + ["avg_price_user"]))
+    merge_cus_cols = [c for c in merge_cus_cols if c in cus_feat_df.columns]
+    df = df.merge(cus_feat_df[merge_cus_cols], on="customer_id", how="left")
+    df = df.merge(art_feat_df[merge_art_cols], on="article_id", how="left")
     df = df.merge(inter_feat_df, on=["customer_id", "article_id"], how="left")
 
     df["buy_count"] = df["buy_count"].fillna(0)
@@ -388,7 +389,7 @@ for cid, _ in low_freq:
 del val_txn_full
 gc.collect()
 
-# 为每个示例用户生成 force plot
+# 为每个示例用户生成归因图
 for label, cid in example_cids:
     user_mask = customer_ids == cid
     if user_mask.sum() == 0:
@@ -400,21 +401,22 @@ for label, cid in example_cids:
     user_scores = model.predict(user_X)
     top_k = min(12, len(user_scores))
     top_indices = np.argsort(user_scores)[::-1][:top_k]
-    # 取第 1 个推荐商品做详细归因
+    # 取 Top-1 推荐商品做 waterfall 归因
     idx0 = top_indices[0]
 
-    fig = plt.figure(figsize=(12, 2.5))
-    shap.force_plot(
-        explainer.expected_value,
-        user_shap[idx0],
-        user_X[idx0],
+    # Waterfall 图 (修复 Windows 字体负号不显示问题)
+    rcParams['axes.unicode_minus'] = False
+    exp = shap.Explanation(
+        values=user_shap[idx0],
+        base_values=float(explainer.expected_value) if not isinstance(explainer.expected_value, (list, np.ndarray)) else float(explainer.expected_value[1] if len(explainer.expected_value) > 1 else explainer.expected_value[0]),
+        data=user_X[idx0],
         feature_names=FEAT_COLS,
-        matplotlib=True,
-        show=False,
     )
-    plt.title(f"{label} (customer_id={cid}) — Top-1 推荐归因")
+    fig = plt.figure(figsize=(10, 6))
+    shap.plots.waterfall(exp, max_display=15, show=False)
+    plt.title(f"{label} (cid={cid}) — Top-1 推荐 SHAP 归因")
     plt.tight_layout()
-    fig.savefig(f"{FIG_DIR}/shap_force_{label}.png", dpi=150, bbox_inches="tight")
+    fig.savefig(f"{FIG_DIR}/shap_waterfall_{label}.png", dpi=150, bbox_inches="tight")
     plt.close()
 
     # Top-5 整体特征贡献

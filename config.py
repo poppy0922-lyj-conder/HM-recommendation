@@ -11,10 +11,10 @@ SEED = 42
 
 # ============ 路径 ============
 # 原始数据目录 (从 Kaggle 下载的 CSV)
-DATA_DIR = "F:/H&M_data"
+DATA_DIR = "E:/H&M_data"
 
 # 中间处理结果 (Parquet / pickle)
-PROCESSED_DIR = "F:/H&M_data/processed"
+PROCESSED_DIR = "E:/H&M_data/processed"
 
 # 输出目录 (模型 / 提交文件)
 OUTPUT_DIR = "F:/HM-recommendation/output"

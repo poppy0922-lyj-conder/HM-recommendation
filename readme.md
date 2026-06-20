@@ -10,6 +10,7 @@
 F:\HM-recommendation/
 ├── step5_item2vec.py          ← 最优模型 (56维: 23基线 + 32 a2v + 1 v2v_sim)
 ├── step7_shap.py              # SHAP 模型可解释性分析
+├── step9_cv.py                # 5 折时序交叉验证稳定性分析
 ├── step1_load_data.py         # 数据加载与验证集划分
 ├── step2_features.py          # 特征工程 (5类 46维特征)
 ├── step3_baseline.py          # 基线模型评估 (流行度/Item-CF)
@@ -56,15 +57,18 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ### 2. 准备数据
 
-从 [Kaggle H&M 竞赛](https://www.kaggle.com/competitions/h-and-m-personalized-fashion-recommendations) 下载数据，放入 `F:/H&M_data/`：
+从 [Kaggle H&M 竞赛](https://www.kaggle.com/competitions/h-and-m-personalized-fashion-recommendations) 下载原始 CSV 数据，放入 `E:/H&M_data/`：
 
 ```
-F:/H&M_data/
+E:/H&M_data/
 ├── articles.csv
 ├── customers.csv
 ├── transactions_train.csv
 └── sample_submission.csv
 ```
+
+> 中间处理后的 Parquet 特征数据 (step1~step4 输出) 可在 [data 仓库](https://github.com/poppy0922-lyj-conder/data.git) 中获取，
+> 直接放置到 `E:/H&M_data/processed/` 目录下即可跳过 step1~step4 直接运行 step5。
 
 ### 3. 最优模型运行
 
@@ -75,6 +79,8 @@ python step3_baseline.py           # 基线评估
 python step4_candidates.py         # 候选生成
 python step5_item2vec.py           # Item2Vec 训练 + 推理 (最优模型)
 python step6_submit.py             # 全量推理提交
+python step7_shap.py               # SHAP 可解释性分析 (需先有模型)
+python step9_cv.py                 # 5 折时序交叉验证稳定性分析 (可选, 需先有特征)
 ```
 
 参数调优示例:

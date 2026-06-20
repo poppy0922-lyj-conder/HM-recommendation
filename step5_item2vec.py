@@ -7,7 +7,7 @@ Step 5 Item2Vec: 序列嵌入增强版
   - Phase 1: build_ltr_data 中新增 v2v_sim 余弦相似度
   - 特征: 23 baseline + 32 a2v + 1 v2v_sim = 56 维
 
-输出: output/model_item2vec.txt / output/submission_item2vec.csv
+输出: output/model_item2vec.txt/ output/submission_item2vec.csv
 """
 
 import sys, os
@@ -231,12 +231,10 @@ print("Phase 0.5: 追加 a2v 嵌入到 art_feat")
 print(f"{'='*60}")
 
 with timer("追加 a2v 嵌入"):
+    a2v_mat = np.array([art2v.get(aid, default_vec) for aid in art_feat["article_id"]], dtype=np.float32)
     for i in range(32):
-        col = f"a2v_{i}"
-        art_feat[col] = art_feat["article_id"].map(
-            lambda x, i=i: art2v.get(x, default_vec)[i]
-        ).astype(np.float32)
-    print(f"  art_feat 新增 {32} 列 (a2v_0 ~ a2v_31)")
+        art_feat[f"a2v_{i}"] = a2v_mat[:, i]
+    print(f"  art_feat 新增 {32} 列 (a2v_0 ~ a2v_{32-1})")
 
 # ============================================================
 # 时间切分: val → train(前6天) + holdout(后1天)
@@ -459,11 +457,10 @@ with timer("读取全量数据"):
         user_hist_full = pickle.load(f)
 
     # 全量 art_feat 也追加上 a2v 嵌入
+    # 追加 a2v 嵌入到全量商品特征 (向量化)
+    a2v_mat_full = np.array([art2v.get(aid, default_vec) for aid in art_feat_full["article_id"]], dtype=np.float32)
     for i in range(32):
-        col = f"a2v_{i}"
-        art_feat_full[col] = art_feat_full["article_id"].map(
-            lambda x, i=i: art2v.get(x, default_vec)[i]
-        ).astype(np.float32)
+        art_feat_full[f"a2v_{i}"] = a2v_mat_full[:, i]
 
     art_pop_full = art_feat_full.set_index("article_id")["popularity_score"].to_dict()
     pop12_full = sorted(art_pop_full, key=lambda x: -art_pop_full[x])[:12]
