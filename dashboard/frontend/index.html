@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HM 个性化推荐系统 · 数据看板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <!-- 全局 CSS 变量与深色科技大屏主题 -->
+    <style>
+      :root {
+        --bg-0: #0f1923;
+        --bg-1: #16202d;
+        --panel: rgba(20, 40, 70, 0.8);
+        --panel-2: rgba(10, 24, 40, 0.92);
+        --panel-3: rgba(7, 18, 30, 0.95);
+        --text: #e0e6ed;
+        --text-soft: #8ca2b8;
+        --text-dim: #68839f;
+        --blue: #0099ff;
+        --blue-2: #00ccff;
+        --blue-3: #33ffff;
+        --line: rgba(77, 185, 255, 0.34);
+        --line-soft: rgba(77, 185, 255, 0.14);
+        --glow: 0 0 15px rgba(0, 153, 255, 0.3);
+        --glow-strong: 0 0 22px rgba(0, 153, 255, 0.42);
+        --radius: 18px;
+      }
+      * { box-sizing: border-box; }
+      html { min-height: 100%; }
+
+      /* ===== 深灰黑渐变背景 · 网格纹理 · 蓝色光晕 ===== */
+      body {
+        margin: 0; min-height: 100vh; color: var(--text);
+        font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: linear-gradient(rgba(18, 52, 86, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(18, 52, 86, 0.08) 1px, transparent 1px), radial-gradient(circle at 20% 0%, rgba(0, 153, 255, 0.16), transparent 30%), radial-gradient(circle at 85% 10%, rgba(0, 204, 255, 0.12), transparent 30%), linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+        background-size: 32px 32px, 32px 32px, auto, auto, auto; overflow-x: hidden;
+      }
+
+      body::before { content: ""; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(circle at center, rgba(0, 153, 255, 0.05), transparent 52%), linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 26%); mix-blend-mode: screen; }
+
+      /* ===== 滚动条深色蓝色样式 ===== */
+      *::-webkit-scrollbar { width: 10px; height: 10px; }
+      *::-webkit-scrollbar-track { background: rgba(7, 18, 30, 0.7); }
+      *::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(0, 153, 255, 0.7), rgba(0, 204, 255, 0.45)); border-radius: 999px; border: 2px solid rgba(7, 18, 30, 0.7); }
+
+      .page-shell { max-width: 1920px; margin: 0 auto; padding: 22px 28px 28px; }
+      .container { width: 100%; }
+
+      /* ===== 顶部标题栏：蓝色发光边框 · 边角装饰 · 分割线 ===== */
+      .dashboard-header { position: relative; margin-bottom: 18px; padding: 18px 24px 16px; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(180deg, rgba(18, 40, 68, 0.9), rgba(11, 26, 42, 0.92)), rgba(20, 40, 70, 0.8); box-shadow: var(--glow), inset 0 0 0 1px rgba(94, 196, 255, 0.08); overflow: hidden; }
+      .dashboard-header::before, .dashboard-header::after { content: ""; position: absolute; top: 14px; width: 76px; height: 36px; border-top: 2px solid rgba(0, 204, 255, 0.9); }
+      .dashboard-header::before { left: 16px; border-left: 2px solid rgba(0, 204, 255, 0.9); clip-path: polygon(0 0, 100% 0, 72% 100%, 0 100%); }
+      .dashboard-header::after { right: 16px; border-right: 2px solid rgba(0, 204, 255, 0.9); clip-path: polygon(28% 0, 100% 0, 100% 100%, 0 100%); }
+      .header-line { position: absolute; left: 24px; right: 24px; top: 0; height: 3px; background: linear-gradient(90deg, transparent 0%, var(--blue) 15%, var(--blue-2) 50%, var(--blue) 85%, transparent 100%); box-shadow: 0 0 18px rgba(0, 204, 255, 0.65); }
+      .header-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; }
+      .title { position: relative; padding-left: 12px; }
+      .title::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 999px; background: linear-gradient(180deg, var(--blue-3), var(--blue)); box-shadow: 0 0 14px rgba(51, 255, 255, 0.6); }
+      .title h1 { margin: 0; font-size: clamp(26px, 2vw, 34px); font-weight: 800; letter-spacing: 1.4px; color: var(--blue-2); text-shadow: 0 0 16px rgba(0, 204, 255, 0.45); }
+      .subtitle { margin-top: 8px; font-size: 12px; letter-spacing: 0.24em; color: var(--text-soft); }
+
+      /* ===== 右上角系统时钟面板 ===== */
+      .clock-panel { min-width: 250px; padding: 12px 16px; border: 1px solid rgba(90, 191, 255, 0.28); border-radius: 16px; background: linear-gradient(180deg, rgba(8, 22, 36, 0.88), rgba(7, 18, 30, 0.94)); box-shadow: inset 0 0 18px rgba(0, 153, 255, 0.08), 0 0 14px rgba(0, 153, 255, 0.18); text-align: right; }
+      .clock-label { font-size: 11px; color: var(--text-dim); letter-spacing: 0.24em; text-transform: uppercase; }
+      .clock-value { margin-top: 6px; font-size: clamp(22px, 1.7vw, 28px); font-weight: 700; color: var(--text); text-shadow: 0 0 12px rgba(0, 204, 255, 0.25); }
+      .clock-date { margin-top: 4px; font-size: 12px; color: var(--text-soft); }
+
+      /* ===== KPI 概览卡片 4 列网格 ===== */
+      .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+
+      /* ===== 通用卡片：半透明深蓝背景 · 蓝色发光边框 · 悬浮动画 ===== */
+      .card { position: relative; background: linear-gradient(180deg, rgba(20, 40, 70, 0.82), rgba(9, 20, 35, 0.92)), var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--glow); backdrop-filter: blur(10px); overflow: hidden; }
+      .card::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(135deg, rgba(51, 255, 255, 0.08), transparent 28%, transparent 72%, rgba(0, 153, 255, 0.08)); }
+      .card::after { content: ""; position: absolute; inset: 10px; border: 1px solid rgba(92, 196, 255, 0.08); border-radius: calc(var(--radius) - 6px); pointer-events: none; }
+      .kpi { min-height: 148px; padding: 20px 20px 18px; display: flex; flex-direction: column; justify-content: center; transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease; }
+      .kpi:hover { transform: translateY(-3px) scale(1.01); box-shadow: var(--glow-strong); border-color: rgba(120, 218, 255, 0.46); }
+      .kpi::before { content: ""; position: absolute; left: 18px; right: 18px; top: 18px; height: 1px; background: linear-gradient(90deg, transparent, rgba(0, 204, 255, 0.55), transparent); }
+      .kpi .value { display: flex; align-items: flex-end; gap: 8px; font-size: clamp(30px, 2.4vw, 44px); font-weight: 800; line-height: 1; letter-spacing: 0.02em; color: var(--blue-2); text-shadow: 0 0 18px rgba(0, 204, 255, 0.38); }
+      .kpi .unit { margin-bottom: 4px; font-size: 13px; font-weight: 700; color: var(--text-soft); text-shadow: none; }
+      .kpi .label { margin-top: 12px; font-size: 13px; color: var(--text-soft); letter-spacing: 0.14em; }
+
+      /* ===== 筛选区：深色输入控件 ===== */
+      .controls-card { margin-bottom: 12px; }
+      .filters { padding: 16px 18px 18px; display: grid; grid-template-columns: 1.5fr 1fr 1fr auto; gap: 16px; align-items: end; }
+      .field label { display: block; margin-bottom: 8px; font-size: 12px; letter-spacing: 0.12em; color: var(--text-soft); }
+      .field select, .field input { width: 100%; height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(65, 170, 255, 0.45); background: linear-gradient(180deg, rgba(8, 18, 30, 0.96), rgba(11, 26, 42, 0.92)); color: var(--text); outline: none; box-shadow: inset 0 0 0 1px rgba(21, 80, 121, 0.4); transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease; }
+      .field select:focus, .field input:focus { border-color: rgba(0, 204, 255, 0.95); box-shadow: 0 0 0 3px rgba(0, 153, 255, 0.16), 0 0 18px rgba(0, 153, 255, 0.22); }
+      .field select option { background: #1a2a4a; color: #ffffff; }
+      input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(83%) sepia(37%) saturate(2937%) hue-rotate(160deg) brightness(97%) contrast(101%); cursor: pointer; }
+      .actions { display: flex; gap: 12px; justify-content: flex-end; }
+
+      /* ===== 按钮：亮蓝色发光 · 波纹动画 · 次级灰边框 ===== */
+      button { position: relative; overflow: hidden; height: 42px; min-width: 108px; padding: 0 18px; border-radius: 12px; border: 1px solid rgba(79, 186, 255, 0.55); background: linear-gradient(180deg, rgba(0, 153, 255, 0.92), rgba(0, 122, 214, 0.92)); color: #eaf8ff; font-weight: 700; letter-spacing: 0.08em; cursor: pointer; box-shadow: 0 0 18px rgba(0, 153, 255, 0.28); transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease; }
+      button::after { content: ""; position: absolute; top: 50%; left: 50%; width: 0; height: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.16); transform: translate(-50%, -50%); transition: width 260ms ease, height 260ms ease; }
+      button:hover { transform: translateY(-2px); box-shadow: 0 0 24px rgba(0, 153, 255, 0.42); border-color: rgba(148, 225, 255, 0.8); }
+      button:active::after { width: 180px; height: 180px; }
+      button.secondary { background: linear-gradient(180deg, rgba(51, 67, 84, 0.78), rgba(28, 40, 54, 0.88)); border-color: rgba(123, 149, 175, 0.46); color: #c8d6e5; box-shadow: none; }
+
+      .status { min-height: 22px; margin: 8px 4px 16px; font-size: 12px; color: var(--text-soft); letter-spacing: 0.08em; }
+
+      /* ===== 图表网格：2×2 布局 ===== */
+      .chart-grid { display: grid; grid-template-columns: 1.28fr 1fr; gap: 16px; }
+      .chart-card { min-height: 390px; padding: 16px 16px 12px; }
+      .chart-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(84, 190, 255, 0.18); color: var(--text); font-size: 15px; font-weight: 700; letter-spacing: 0.06em; }
+      .chart-title span:first-child { position: relative; padding-left: 12px; }
+      .chart-title span:first-child::before { content: ""; position: absolute; left: 0; top: 5px; bottom: 5px; width: 3px; border-radius: 999px; background: linear-gradient(180deg, var(--blue-2), var(--blue)); box-shadow: 0 0 10px rgba(0, 204, 255, 0.5); }
+      .chart-subtitle { color: var(--text-soft); font-size: 12px; font-weight: 600; }
+      .chart { width: 100%; height: 320px; }
+
+      /* ===== 聚合明细表 ===== */
+      details { margin-top: 16px; }
+      details > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px 12px; cursor: pointer; user-select: none; }
+      details > summary::-webkit-details-marker { display: none; }
+      .table-title { font-size: 15px; font-weight: 700; color: var(--text); }
+      .table-wrap { padding: 0 18px 18px; overflow: auto; }
+      table { width: 100%; border-collapse: collapse; border: 1px solid rgba(79, 186, 255, 0.24); border-radius: 14px; overflow: hidden; background: rgba(7, 18, 30, 0.62); }
+      th, td { padding: 12px 14px; border-bottom: 1px solid rgba(77, 185, 255, 0.12); font-size: 12px; text-align: left; }
+      th { background: linear-gradient(180deg, rgba(6, 46, 85, 0.92), rgba(7, 27, 50, 0.92)); color: var(--blue-2); font-weight: 700; letter-spacing: 0.08em; }
+      tbody tr:nth-child(odd) { background: rgba(12, 20, 31, 0.76); }   /* 奇数行 */
+      tbody tr:nth-child(even) { background: rgba(14, 36, 58, 0.68); }  /* 偶数行 */
+      tbody tr:hover { background: rgba(0, 153, 255, 0.16); }            /* 悬浮高亮 */
+      tr:last-child td { border-bottom: none; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      .table-summary-note { color: var(--text-soft); font-size: 12px; }
+
+      /* ===== 响应式断点 ===== */
+      @media (max-width: 1440px) { .page-shell { padding: 18px 18px 22px; } .kpi-grid { gap: 12px; } .chart-grid { grid-template-columns: 1fr; } }
+      @media (max-width: 1100px) { .header-main, .filters, .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .clock-panel { min-width: 100%; } }
+      @media (max-width: 720px) { .page-shell { padding: 14px; } .header-main, .filters, .kpi-grid { grid-template-columns: 1fr; } .actions { justify-content: stretch; } button { flex: 1; } .chart { height: 280px; } }
+
+      /* ===== 三标签页导航栏 ===== */
+      .tabbar { margin: 0 0 18px 0; padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+      .tab-item { height: 44px; min-width: 160px; padding: 0 16px; border-radius: 14px; border: 1px solid rgba(79, 186, 255, 0.28); background: linear-gradient(180deg, rgba(9, 18, 30, 0.92), rgba(11, 26, 42, 0.92)); color: var(--text-soft); font-weight: 800; letter-spacing: 0.08em; cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, color 160ms ease; }
+      .tab-item:hover { transform: translateY(-1px); border-color: rgba(0, 204, 255, 0.55); box-shadow: 0 0 18px rgba(0, 153, 255, 0.18); }
+      .tab-item.is-active { color: #eaf8ff; border-color: rgba(0, 204, 255, 0.85); background: linear-gradient(180deg, rgba(0, 153, 255, 0.26), rgba(11, 26, 42, 0.92)); box-shadow: 0 0 22px rgba(0, 153, 255, 0.32); }
+      .tab-panel { display: none; }
+      .tab-panel.is-active { display: block; }
+
+      /* ===== 标签页内面板与控件 ===== */
+      .panel-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+      .panel-title { font-size: 16px; font-weight: 800; letter-spacing: 0.12em; color: var(--text); }
+      .panel-hint { font-size: 12px; color: var(--text-soft); }
+      .mini-controls { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+      .tab-status { min-height: 22px; margin: 10px 4px 16px; font-size: 12px; color: var(--text-soft); letter-spacing: 0.08em; }
+      .kpi-grid-2 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+      .kpi-mini { min-height: 120px; padding: 18px 18px 16px; }
+      .kpi-mini .value { font-size: clamp(26px, 2vw, 36px); }
+      .kpi-mini .value.data-source { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      /* ===== 深色输入框 + 下拉选择器 ===== */
+      .input-inline { height: 42px; padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(65, 170, 255, 0.45); background: linear-gradient(180deg, rgba(8, 18, 30, 0.96), rgba(11, 26, 42, 0.92)); color: var(--text); outline: none; box-shadow: inset 0 0 0 1px rgba(21, 80, 121, 0.4); }
+      .input-inline::placeholder { color: rgba(140, 162, 184, 0.7); font-size: 14px; }
+      .select-inline { height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid #0099ff; background-color: #1a2a4a; color: #ffffff; outline: none; box-shadow: 0 0 5px rgba(0, 153, 255, 0.3); }
+      .select-inline option { background-color: #1a2a4a; color: #ffffff; }
+    </style>
+  </head>
+  <body>
+    <!-- ==================== 页面壳 ==================== -->
+    <div class="page-shell">
+
+      <!-- ===== 顶部标题栏 ===== -->
+      <header class="container dashboard-header"><div class="header-line"></div><div class="header-main"><div class="title"><h1>HM 个性化推荐系统 · 数据看板</h1><div class="subtitle">后端聚合统计 · 前端联动渲染 · 禁止下发交易明细</div></div><div class="clock-panel"><div class="clock-label">SYSTEM TIME</div><div class="clock-value mono" id="clockValue">--:--:--</div><div class="clock-date" id="clockDate">----/--/--</div></div></div></header>
+
+      <main class="container">
+
+        <!-- ===== 标签页导航 ===== -->
+        <nav class="tabbar card" id="tabBar">
+          <button class="tab-item is-active" data-tab="overview" type="button">业务数据概览</button>
+          <button class="tab-item" data-tab="recall" type="button">召回路径分析</button>
+          <button class="tab-item" data-tab="features" type="button">特征分析</button>
+        </nav>
+
+        <!-- ===== 标签页 1：业务数据概览 ===== -->
+        <section class="tab-panel is-active" id="tabOverview">
+          <!-- KPI 概览 4 卡片 -->
+          <div class="kpi-grid">
+            <div class="card kpi"><div class="value"><span id="kpiTxn">--</span><span class="unit">笔</span></div><div class="label">总交易笔数</div></div>
+            <div class="card kpi"><div class="value"><span id="kpiAmt">--</span><span class="unit">元</span></div><div class="label">总消费金额</div></div>
+            <div class="card kpi"><div class="value"><span id="kpiUsers">--</span><span class="unit">人</span></div><div class="label">独立用户量</div></div>
+            <div class="card kpi"><div class="value"><span id="kpiGoods">--</span><span class="unit">件</span></div><div class="label">独立商品量</div></div>
+          </div>
+
+          <!-- 全局筛选区：数据集切换 · 日期起止 · 重置/刷新按钮 -->
+          <div class="card controls-card"><div class="filters">
+            <div class="field"><label>交易数据集（train/val）</label><select id="txnType"><option value="train">train（训练集交易）</option><option value="val">val（验证集交易）</option></select></div>
+            <div class="field"><label>开始日期</label><input id="startDay" type="date" value="2018-09-20" /></div>
+            <div class="field"><label>结束日期</label><input id="endDay" type="date" value="2020-09-08" /></div>
+            <div class="actions"><button class="secondary" id="resetBtn">重置</button><button id="refreshBtn">刷新</button></div>
+          </div></div>
+
+          <div class="status" id="status"></div>
+
+          <!-- 4 图表：趋势折线 · 年龄柱状 · 品类条形 · 对比柱状 -->
+          <div class="chart-grid">
+            <div class="card chart-card"><div class="chart-title"><span>每日销售 & 订单趋势</span><span class="chart-subtitle mono" id="rangeHint">-</span></div><div id="chartTrend" class="chart"></div></div>
+            <div class="card chart-card"><div class="chart-title"><span>用户年龄分布（人数）</span></div><div id="chartAge" class="chart"></div></div>
+            <div class="card chart-card"><div class="chart-title"><span>商品大类销量 Top10</span></div><div id="chartCat" class="chart"></div></div>
+            <div class="card chart-card"><div class="chart-title"><span>训练 vs 验证：核心指标对比</span></div><div id="chartCompare" class="chart"></div></div>
+          </div>
+
+          <!-- 折叠式聚合明细表 -->
+          <details class="card" open><summary><span class="table-title">聚合明细表（按日汇总）</span><span class="table-summary-note">仅展示聚合结果</span></summary><div class="table-wrap"><table><thead><tr><th>日期</th><th>销售额</th><th>订单量</th></tr></thead><tbody id="detailBody"></tbody></table></div></details>
+        </section>
+
+        <!-- ===== 标签页 2：召回路径分析 ===== -->
+        <section class="tab-panel" id="tabRecall">
+          <div class="panel-header"><div><div class="panel-title">召回路径分析</div><div class="panel-hint">按需加载 · 仅展示真实计算结果</div></div><div class="mini-controls"><input class="input-inline mono" id="recallUserId" placeholder="输入 user_id (customer)" /><button id="recallUserBtn" type="button">查询路径</button></div></div>
+          <!-- 3 个召回 KPI 卡片 -->
+          <div class="kpi-grid-2">
+            <div class="card kpi kpi-mini"><div class="value"><span id="recallKpiPop">--</span></div><div class="label">Popularity MAP@12</div></div>
+            <div class="card kpi kpi-mini"><div class="value"><span id="recallKpiCF">--</span></div><div class="label">Item-CF MAP@12</div></div>
+            <div class="card kpi kpi-mini"><div class="value"><span id="recallKpiUsers">--</span></div><div class="label">评估用户数</div></div>
+          </div>
+          <div class="tab-status" id="recallStatus"></div>
+          <!-- 通道饼图 + Sankey 图 -->
+          <div class="chart-grid">
+            <div class="card chart-card"><div class="chart-title"><span>召回通道占比</span></div><div id="chartRecallChannels" class="chart"></div></div>
+            <div class="card chart-card"><div class="chart-title"><span>用户召回链路（Sankey）</span></div><div id="chartRecallSankey" class="chart"></div></div>
+          </div>
+        </section>
+
+        <!-- ===== 标签页 3：特征分析 ===== -->
+        <section class="tab-panel" id="tabFeatures">
+          <div class="panel-header"><div><div class="panel-title">特征分析</div><div class="panel-hint">按需加载 · 模型/报告缺失将直接返回错误提示</div></div><div class="mini-controls"><select class="select-inline" id="featSelect"></select><button id="featDistBtn" type="button">查看分布</button></div></div>
+          <!-- 3 个特征 KPI 卡片 -->
+          <div class="kpi-grid-2">
+            <div class="card kpi kpi-mini"><div class="value data-source" id="featKpiModel" title="step5_feature_ablation_report.md">--</div><div class="label">数据来源</div></div>
+            <div class="card kpi kpi-mini"><div class="value"><span id="featKpiTop1">--</span></div><div class="label">Top1 特征</div></div>
+            <div class="card kpi kpi-mini"><div class="value"><span id="featKpiAblation">--</span></div><div class="label">消融条目 <small style="color:#68839f;font-weight:400">含基线，基础特征46维</small></div></div>
+          </div>
+          <div class="tab-status" id="featStatus"></div>
+          <!-- 特征重要性 + 分布对比 + 消融瀑布 -->
+          <div class="chart-grid">
+            <div class="card chart-card"><div class="chart-title"><span>特征重要性（Gain）</span></div><div id="chartFeatImportance" class="chart"></div></div>
+            <div class="card chart-card"><div class="chart-title"><span>特征分布对比（Train vs Val）</span></div><div id="chartFeatDist" class="chart"></div></div>
+            <div class="card chart-card" style="grid-column:1/-1"><div class="chart-title"><span>消融实验（Δ全46维）</span></div><div id="chartFeatAblation" class="chart" style="height:360px"></div></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ==================== JavaScript ==================== -->
+    <script>
+      // ===== 全局配置 =====
+      var API_BASE = "http://127.0.0.1:8000"   // 后端服务地址
+      var REQUEST_TIMEOUT = 60000               // 请求超时 60 秒
+
+      // ===== 业务概览标签页 DOM 引用 =====
+      var els = { txnType: document.getElementById("txnType"), startDay: document.getElementById("startDay"), endDay: document.getElementById("endDay"), refreshBtn: document.getElementById("refreshBtn"), resetBtn: document.getElementById("resetBtn"), status: document.getElementById("status"), kpiTxn: document.getElementById("kpiTxn"), kpiAmt: document.getElementById("kpiAmt"), kpiUsers: document.getElementById("kpiUsers"), kpiGoods: document.getElementById("kpiGoods"), rangeHint: document.getElementById("rangeHint"), detailBody: document.getElementById("detailBody"), clockValue: document.getElementById("clockValue"), clockDate: document.getElementById("clockDate") }
+
+      // ===== 初始化 ECharts 实例（业务概览 4 图表） =====
+      var overviewCharts = [ echarts.init(document.getElementById("chartTrend")), echarts.init(document.getElementById("chartAge")), echarts.init(document.getElementById("chartCat")), echarts.init(document.getElementById("chartCompare")) ]
+      var chartTrend = overviewCharts[0], chartAge = overviewCharts[1], chartCat = overviewCharts[2], chartCompare = overviewCharts[3]
+
+      // ===== 通用格式化工具 =====
+      function fmtNumber(x, d) { if (d === void 0) d = 0; if (x === null || x === void 0 || Number.isNaN(x)) return "-"; return Number(x).toLocaleString("zh-CN", { minimumFractionDigits: d, maximumFractionDigits: d }) }
+      function fmtMoney(x) { if (x === null || x === void 0 || Number.isNaN(x)) return "-"; return Number(x).toFixed(2) }   // 金额保留 2 位小数
+      function fmtDec4(x) { if (x === null || x === void 0 || Number.isNaN(x)) return ""; return Number(x).toFixed(4) }       // 4 位小数
+
+      // ===== 实时时钟（每秒更新） =====
+      function updateClock() { var n = new Date(); els.clockValue.textContent = n.toLocaleTimeString("zh-CN", { hour12: false }); els.clockDate.textContent = n.toLocaleDateString("zh-CN").replace(/\//g, "-") }
+
+      // ===== 状态栏 & KPI 加载态 =====
+      function setStatus(t) { els.status.textContent = t || "" }
+      function showKpiLoading() { els.kpiTxn.textContent = els.kpiAmt.textContent = els.kpiUsers.textContent = els.kpiGoods.textContent = "--" }
+
+      // ===== 图表错误提示（居中显示文字） =====
+      function chartErrorGraphic(chart, msg) { chart.setOption({ backgroundColor: "transparent", graphic: { type: "text", left: "center", top: "center", style: { text: msg || "加载失败", fill: "#8ca2b8", fontSize: 14, fontWeight: 700, textAlign: "center" } }, series: [] }, true) }
+
+      // ===== 通用 fetch 封装（支持超时 AbortController） =====
+      async function fetchJson(path, params, timeoutMs) {
+        if (params === void 0) params = {}; if (timeoutMs === void 0) timeoutMs = REQUEST_TIMEOUT
+        var url = new URL(API_BASE + path)
+        Object.entries(params).forEach(function (kv) { var k = kv[0], v = kv[1]; if (v !== null && v !== void 0 && v !== "") url.searchParams.set(k, v) })
+        var ctrl = new AbortController(); var timer = setTimeout(function () { ctrl.abort() }, timeoutMs)
+        try {
+          var res = await fetch(url.toString(), { method: "GET", signal: ctrl.signal }); clearTimeout(timer)
+          if (!res.ok) { var detail = ""; try { var j = await res.json(); detail = j && j.detail ? j.detail : "" } catch (_) { detail = "" }; throw new Error(detail || "请求失败: " + res.status) }
+          var data = await res.json()
+          if (data && data.error) throw new Error((data.message || "数据加载失败") + (data.detail ? " — " + data.detail : ""))
+          return data
+        } catch (e) { clearTimeout(timer); if (e && e.name === "AbortError") throw new Error("请求超时 " + (timeoutMs / 1000) + "s: " + path); throw e }
+      }
+
+      function _formatFetchError(e, defaultMsg) {
+        var msg = e && e.message ? e.message : (e || defaultMsg)
+        if (msg && msg.indexOf("Failed to fetch") !== -1) return "后端服务未启动，请先运行 run_dashboard.bat 启动服务（http://127.0.0.1:8000）"
+        if (msg && msg.indexOf("请求超时") !== -1) return msg
+        if (msg && msg.indexOf("请求失败:") !== -1) return "接口请求异常（HTTP " + msg.replace("请求失败:", "").trim() + "），请检查后端控制台报错信息"
+        return msg || defaultMsg
+      }
+
+      // ===== ECharts 通用主题基础配置（深色透明背景、tooltip 样式、legend 样式） =====
+      function baseChartOption() { return { backgroundColor: "transparent", textStyle: { color: "#e0e6ed" }, grid: { left: 54, right: 22, top: 34, bottom: 38, containLabel: true }, tooltip: { trigger: "axis", backgroundColor: "rgba(9, 18, 30, 0.94)", borderColor: "rgba(0, 204, 255, 0.45)", borderWidth: 1, textStyle: { color: "#e0e6ed" }, axisPointer: { type: "line", lineStyle: { color: "rgba(51, 255, 255, 0.55)", width: 1 } } }, legend: { top: 0, left: 0, itemWidth: 12, itemHeight: 10, textStyle: { color: "#b7c7d8", fontSize: 12 } } } }
+
+      // ===== 坐标轴通用配置（浅灰色轴线、标签、网格线） =====
+      function axisCommon() { return { axisLine: { lineStyle: { color: "rgba(132, 162, 184, 0.45)" } }, axisTick: { show: false }, axisLabel: { color: "#8ca2b8", fontSize: 11, margin: 15 }, splitLine: { lineStyle: { color: "rgba(140, 162, 184, 0.12)" } } } }
+
+      // ==================== 图表渲染函数 ====================
+
+      // ----- 1. 每日销售&订单趋势（双 Y 轴折线图） -----
+      function renderTrend(data) {
+        var seriesArr = (data && data.series) || []
+        // 无数据时显示提示
+        if (seriesArr.length === 0) { chartErrorGraphic(chartTrend, "当前数据集该日期区间无交易数据"); els.rangeHint.textContent = "-"; els.detailBody.innerHTML = ""; return }
+        var dates = seriesArr.map(function (d) { return d.date }), sales = seriesArr.map(function (d) { return d.sales_amount }), orders = seriesArr.map(function (d) { return d.orders })
+        els.rangeHint.textContent = data.start_day + " ~ " + data.end_day
+        var axisConf = { axisLine: { lineStyle: { color: "rgba(132, 162, 184, 0.45)" } }, axisTick: { show: false }, splitLine: { lineStyle: { color: "rgba(140, 162, 184, 0.12)" } } }
+        // clear + setOption(true) 非合并重绘，彻底清除上一轮数据残留
+        chartTrend.clear()
+        chartTrend.setOption({ backgroundColor: "transparent", textStyle: { color: "#e0e6ed" }, grid: { left: 56, right: 100, top: 40, bottom: 38, containLabel: true }, tooltip: { trigger: "axis", backgroundColor: "rgba(9, 18, 30, 0.94)", borderColor: "rgba(0, 204, 255, 0.45)", borderWidth: 1, textStyle: { color: "#e0e6ed" }, axisPointer: { type: "line", lineStyle: { color: "rgba(51, 255, 255, 0.55)", width: 1 } } }, legend: { top: 0, right: 0, left: "auto", itemWidth: 12, itemHeight: 10, textStyle: { color: "#b7c7d8", fontSize: 12 } },
+          xAxis: { type: "category", boundaryGap: false, data: dates, ...axisConf, axisLabel: { color: "#8ca2b8", fontSize: 11, margin: 15 } },
+          yAxis: [{ type: "value", min: 0, name: "销售额", nameLocation: "middle", nameGap: 44, nameTextStyle: { color: "#8ca2b8", fontSize: 11 }, ...axisConf, axisLabel: { color: "#8ca2b8", fontSize: 11, margin: 20 } }, { type: "value", min: 0, name: "订单量", nameLocation: "middle", nameGap: 44, nameTextStyle: { color: "#8ca2b8", fontSize: 11 }, ...axisConf, axisLabel: { color: "#8ca2b8", fontSize: 11, margin: 25 }, splitLine: { show: false } }],
+          series: [{ name: "销售额", type: "line", yAxisIndex: 0, smooth: true, symbol: "circle", symbolSize: 6, showSymbol: false, lineStyle: { width: 3, color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#0099ff" }, { offset: 1, color: "#00ccff" }]) }, itemStyle: { color: "#00ccff", borderColor: "#d7fbff", borderWidth: 1 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(0, 204, 255, 0.25)" }, { offset: 1, color: "rgba(0, 204, 255, 0.02)" }]) }, emphasis: { focus: "series" }, data: sales }, { name: "订单量", type: "line", yAxisIndex: 1, smooth: true, symbol: "circle", symbolSize: 6, showSymbol: false, lineStyle: { width: 2.5, color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#00ccff" }, { offset: 1, color: "#33ffff" }]) }, itemStyle: { color: "#33ffff", borderColor: "#ffffff", borderWidth: 1 }, emphasis: { focus: "series" }, data: orders }]
+        }, true)
+
+        // 聚合明细表：取最近 60 天展示，直接使用后端返回的 YYYY-MM-DD 原始字符串，不做 Date 转换
+        els.detailBody.innerHTML = seriesArr.slice().reverse().slice(0, 60).reverse().map(function (r) { return '<tr><td class="mono">' + r.date + '</td><td>' + fmtMoney(r.sales_amount) + '</td><td>' + fmtNumber(r.orders, 0) + '</td></tr>' }).join("")
+      }
+
+      // ----- 2. 用户年龄分布柱状图 -----
+      function renderAge(data) { var x = data.bins.map(function (d) { return d.age_bin }), y = data.bins.map(function (d) { return d.users }); chartAge.clear(); chartAge.setOption({ ...baseChartOption(), grid: { left: 54, right: 22, top: 30, bottom: 38, containLabel: true }, xAxis: { ...axisCommon(), type: "category", data: x }, yAxis: { ...axisCommon(), type: "value", min: 0 }, series: [{ type: "bar", data: y, barWidth: 24, itemStyle: { borderRadius: [8, 8, 0, 0], color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "#33ffff" }, { offset: 0.5, color: "#00ccff" }, { offset: 1, color: "#0099ff" }]), shadowBlur: 12, shadowColor: "rgba(0, 153, 255, 0.35)" } }] }, true) }
+
+      // ----- 3. 商品大类 Top10 横向条形图 -----
+      function renderCategory(data) { var y = data.items.map(function (d) { return d.category }).reverse(), x = data.items.map(function (d) { return d.qty }).reverse(); chartCat.clear(); chartCat.setOption({ ...baseChartOption(), grid: { left: 148, right: 22, top: 30, bottom: 30, containLabel: true }, xAxis: { ...axisCommon(), type: "value", min: 0 }, yAxis: { ...axisCommon(), type: "category", data: y }, series: [{ type: "bar", data: x, barWidth: 18, itemStyle: { borderRadius: [0, 10, 10, 0], color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [{ offset: 0, color: "#33ffff" }, { offset: 0.4, color: "#00ccff" }, { offset: 1, color: "#0099ff" }]), shadowBlur: 10, shadowColor: "rgba(0, 153, 255, 0.32)" } }] }, true) }
+
+      // ----- 4. 训练/验证集对比柱状图 -----
+      function renderCompare(data) { var ind = [{ k: "total_transactions", n: "总交易" }, { k: "total_amount", n: "总金额" }, { k: "unique_customers", n: "独立用户" }, { k: "unique_articles", n: "独立商品" }], x = ind.map(function (i) { return i.n }), tr = ind.map(function (i) { return data.train[i.k] }), vl = ind.map(function (i) { return data.val[i.k] }); chartCompare.clear(); chartCompare.setOption({ ...baseChartOption(), xAxis: { ...axisCommon(), type: "category", data: x }, yAxis: { ...axisCommon(), type: "value", min: 0 }, series: [{ name: "train", type: "bar", data: tr, barWidth: 18, itemStyle: { borderRadius: [8, 8, 0, 0], color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "#00ccff" }, { offset: 1, color: "#0099ff" }]), shadowBlur: 10, shadowColor: "rgba(0, 153, 255, 0.28)" } }, { name: "val", type: "bar", data: vl, barWidth: 18, itemStyle: { borderRadius: [8, 8, 0, 0], color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "#86cfff" }, { offset: 1, color: "#3f80cf" }]), shadowBlur: 10, shadowColor: "rgba(90, 140, 220, 0.24)" } }] }, true) }
+
+      // ==================== 筛选 & 数据刷新逻辑 ====================
+
+      // 读取当前筛选条件
+      function readFilters() { return { txn_type: els.txnType.value, start_day: els.startDay.value, end_day: els.endDay.value } }
+
+      // 趋势图接口返回的日期区间回填到日期选择器
+      function setDateInputs(range) { if (range && range.start_day && !els.startDay.value) els.startDay.value = range.start_day; if (range && range.end_day && !els.endDay.value) els.endDay.value = range.end_day }
+
+      // 清空全部概览图表
+      function clearAllOverviewCharts() { overviewCharts.forEach(function (c) { c.clear() }) }
+
+      // 全部图表显示错误文字
+      function showErrorInCharts(msg) { overviewCharts.forEach(function (c) { chartErrorGraphic(c, msg) }) }
+
+      // 核心刷新函数：根据当前筛选条件并行请求 5 个接口、更新 KPI/图表/明细表
+      async function refreshAll() { var f = readFilters(); if (arguments.length > 0 && arguments[0] && arguments[0].resetDate) { els.startDay.value = "2018-09-20"; els.endDay.value = "2020-09-08" } setStatus("正在刷新数据…"); showKpiLoading(); clearAllOverviewCharts()
+        try { var r = await Promise.all([fetchJson("/api/kpi/overview", { txn_type: f.txn_type }), fetchJson("/api/trend/daily_sales", { txn_type: f.txn_type, start_day: f.start_day, end_day: f.end_day }), fetchJson("/api/user/age_dist", { txn_type: f.txn_type }), fetchJson("/api/goods/top_category", { txn_type: f.txn_type, top_n: 10 }), fetchJson("/api/compare/train_val")]), k = r[0], t = r[1], a = r[2], c = r[3], p = r[4]
+          els.kpiTxn.textContent = fmtNumber(k.total_transactions)
+          els.kpiAmt.textContent = fmtMoney(k.total_amount)
+          els.kpiUsers.textContent = fmtNumber(k.unique_customers)
+          els.kpiGoods.textContent = fmtNumber(k.unique_articles)
+          setDateInputs(t); renderTrend(t); renderAge(a); renderCategory(c); renderCompare(p); setStatus("")
+        } catch (e) { setStatus("数据请求失败\n" + _formatFetchError(e, "请检查后端服务是否正常运行")); showErrorInCharts("数据加载失败") } }
+
+      // ===== 事件绑定 =====
+      window.addEventListener("resize", function () { overviewCharts.forEach(function (c) { c.resize() }) })
+      els.refreshBtn.addEventListener("click", function () { refreshAll() })
+      els.resetBtn.addEventListener("click", function () { refreshAll({ resetDate: true }) })
+      els.txnType.addEventListener("change", function () { refreshAll({ resetDate: true }) })  // 切换数据集时同步全刷
+      updateClock(); setInterval(updateClock, 1000); refreshAll()
+
+      // ==================== 标签页状态管理 ====================
+      var tabState = { active: "overview", recallLoaded: false, featLoaded: false, charts: { recallChannels: null, recallSankey: null, featImportance: null, featDist: null, featAblation: null } }
+
+      function setTabStatus(elId, msg) { var el = document.getElementById(elId); if (!el) return; el.textContent = msg || "" }
+
+      // 切换活跃标签页
+      function setActiveTab(t) { tabState.active = t; document.querySelectorAll("#tabBar .tab-item").forEach(function (b) { b.classList.toggle("is-active", b.dataset.tab === t) }); document.getElementById("tabOverview").classList.toggle("is-active", t === "overview"); document.getElementById("tabRecall").classList.toggle("is-active", t === "recall"); document.getElementById("tabFeatures").classList.toggle("is-active", t === "features") }
+
+      // 按需初始化召回归分析标签页图表（首次切换时调用）
+      function ensureRecallCharts() { if (!tabState.charts.recallChannels) tabState.charts.recallChannels = echarts.init(document.getElementById("chartRecallChannels")); if (!tabState.charts.recallSankey) tabState.charts.recallSankey = echarts.init(document.getElementById("chartRecallSankey")) }
+
+      // 按需初始化特征分析标签页图表（首次切换时调用）
+      function ensureFeatureCharts() { if (!tabState.charts.featImportance) tabState.charts.featImportance = echarts.init(document.getElementById("chartFeatImportance")); if (!tabState.charts.featDist) tabState.charts.featDist = echarts.init(document.getElementById("chartFeatDist")); if (!tabState.charts.featAblation) tabState.charts.featAblation = echarts.init(document.getElementById("chartFeatAblation")) }
+
+      // ==================== 召回归分析标签页 ====================
+
+      // ----- 召回通道占比环形饼图 -----
+      function renderRecallChannelsPie(data) {
+        ensureRecallCharts(); var items = (data && data.channels) || []
+        var pie = items.filter(function (x) { return x.channel !== "history+cf+pop" }).map(function (x) { return { name: x.channel, value: x.avg_candidates } })
+        tabState.charts.recallChannels.clear()
+        tabState.charts.recallChannels.setOption({
+          backgroundColor: "transparent", textStyle: { color: "#e0e6ed" },
+          tooltip: { trigger: "item", backgroundColor: "rgba(9, 18, 30, 0.94)", borderColor: "rgba(0, 204, 255, 0.45)", textStyle: { color: "#e0e6ed" } },
+          legend: { left: 0, top: "center", orient: "vertical", textStyle: { color: "#b7c7d8", fontSize: 12 }, itemWidth: 12, itemHeight: 10 },
+          series: [{ type: "pie", radius: ["57%", "82%"], center: ["58%", "50%"], avoidLabelOverlap: true,
+            label: { color: "#e0e6ed", fontSize: 12, fontWeight: 700, formatter: function (p) { return p.name + "\n" + (p.percent).toFixed(1) + "%" } },
+            labelLine: { lineStyle: { color: "rgba(140, 162, 184, 0.35)" } },
+            itemStyle: { borderColor: "rgba(0, 204, 255, 0.22)", borderWidth: 1, shadowBlur: 16, shadowColor: "rgba(0, 153, 255, 0.18)" },
+            // 三通道配色：history #0066cc · cf #0099ff · pop #33ccff
+            data: pie.map(function (d, i) { return { name: d.name, value: d.value, itemStyle: { color: i === 0 ? "#0066cc" : i === 1 ? "#0099ff" : "#33ccff" } } })
+          }]
+        }, true)
+      }
+
+      // ----- 用户召回链路 Sankey 图 -----
+      function renderRecallSankey(resp) {
+        ensureRecallCharts(); var s = resp && resp.sankey ? resp.sankey : { nodes: [], links: [] }
+        // 四节点配色映射
+        var colorMap = { "历史购买": "#0066cc", "相似召回": "#0099ff", "流行度": "#33ccff", "候选集合": "#4DB8FF", "重叠": "#6688cc" }
+        var nodes = (s.nodes || []).map(function (n) { return { name: n.name, itemStyle: { color: colorMap[n.name] || "#0066cc", borderColor: "rgba(0, 204, 255, 0.45)", borderWidth: 1, shadowBlur: 8, shadowColor: "rgba(0, 153, 255, 0.18)" }, label: { color: "#e0e6ed", fontSize: 12 } } })
+        tabState.charts.recallSankey.clear()
+        tabState.charts.recallSankey.setOption({
+          backgroundColor: "transparent", tooltip: { trigger: "item", backgroundColor: "rgba(9, 18, 30, 0.94)", borderColor: "rgba(0, 204, 255, 0.45)", textStyle: { color: "#e0e6ed" } },
+          series: [{ type: "sankey", data: nodes, links: s.links || [], nodeAlign: "justify", nodeWidth: 20, nodeGap: 15, layoutIterations: 0,
+            emphasis: { focus: "adjacency" }, lineStyle: { color: "rgba(0, 153, 255, 0.35)", curveness: 0.5 }
+          }]
+        }, true)
+      }
+
+      // Sankey 无查询时占位文字
+      function showSankeyPlaceholder(msg) { ensureRecallCharts(); chartErrorGraphic(tabState.charts.recallSankey, msg || "请输入用户ID并点击查询") }
+
+      // 加载召回标签页数据（仅首次）
+      async function loadRecallTab() { if (tabState.recallLoaded) return; tabState.recallLoaded = true; setTabStatus("recallStatus", "正在加载召回分析数据…")
+        try { var r = await Promise.all([fetchJson("/api/recall/metrics"), fetchJson("/api/recall/channels")]), m = r[0], ch = r[1], mm = (m && m.metrics) || [], pop = mm.find(function (x) { return x.name === "popularity_map12" }), cf = mm.find(function (x) { return x.name === "itemcf_map12" }); document.getElementById("recallKpiPop").textContent = pop ? fmtNumber(pop.value, 5) : "--"; document.getElementById("recallKpiCF").textContent = cf ? fmtNumber(cf.value, 5) : "--"; document.getElementById("recallKpiUsers").textContent = m && m.meta ? fmtNumber(m.meta.users, 0) : "--"; renderRecallChannelsPie(ch); showSankeyPlaceholder("请输入用户ID并点击查询"); setTabStatus("recallStatus", "") } catch (e) { setTabStatus("recallStatus", "召回数据加载失败\n错误详情：" + _formatFetchError(e, "请检查 val_candidates.pkl 和 item_sim.pkl 文件是否存在")) } }
+
+      // 查询指定用户的召回链路
+      async function queryRecallUserPath() { var uid = (document.getElementById("recallUserId").value || "").trim(); if (!uid) { setTabStatus("recallStatus", "请输入 user_id（customer_id）后再查询。"); showSankeyPlaceholder("请输入用户ID并点击查询"); return } setTabStatus("recallStatus", "正在加载用户召回链路…")
+        try { var d = await fetchJson("/api/recall/user_path", { user_id: uid }); renderRecallSankey(d); setTabStatus("recallStatus", "") } catch (e) { showSankeyPlaceholder("加载失败，请检查数据文件"); setTabStatus("recallStatus", "召回数据加载失败\n错误详情：" + _formatFetchError(e, "请检查 val_candidates.pkl 和 item_sim.pkl 文件是否存在")) } }
+
+      // ==================== 特征分析标签页 ====================
+
+      // ----- 特征重要性横向条形图（蓝渐变 #0066cc→#00ccff，条间距 8px，高度 18px） -----
+      function renderFeatImportance(data) {
+        ensureFeatureCharts(); var items = (data && data.items) || [], top = items.slice(0, 18).reverse()
+        var y = top.map(function (d) { return d.feature_cn || d.feature }), x = top.map(function (d) { return d.importance })
+        tabState.charts.featImportance.clear()
+        tabState.charts.featImportance.setOption({
+          backgroundColor: "transparent", grid: { left: 160, right: 80, top: 34, bottom: 30, containLabel: true },
+          xAxis: { ...axisCommon(), type: "value", min: 0 }, yAxis: { ...axisCommon(), type: "category", data: y },
+          tooltip: { trigger: "axis", backgroundColor: "rgba(9, 18, 30, 0.94)", borderColor: "rgba(0, 204, 255, 0.45)", borderWidth: 1, textStyle: { color: "#e0e6ed" }, axisPointer: { type: "line", lineStyle: { color: "rgba(51, 255, 255, 0.55)", width: 1 } } },
+          series: [{ type: "bar", data: x, barWidth: 18, barGap: "8px", itemStyle: { borderRadius: [0, 10, 10, 0], color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [{ offset: 0, color: "#0066cc" }, { offset: 0.5, color: "#0099ff" }, { offset: 1, color: "#00ccff" }]), shadowBlur: 10, shadowColor: "rgba(0, 153, 255, 0.28)" }, label: { show: true, position: "right", color: "#ffffff", fontSize: 11, formatter: function (p) { return fmtDec4(p.value) } } }]
+        }, true)
+        // 点击条形联动切换右侧特征分布图
+        tabState.charts.featImportance.off("click"); tabState.charts.featImportance.on("click", function (p) { if (p && p.name) { var sel = document.getElementById("featSelect"); for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].textContent === p.name) { sel.value = sel.options[i].value; break } } queryFeatureDistribution() } })
+      }
+
+      // ----- 特征分布对比双线图（Train vs Val） -----
+      function renderFeatDist(data) {
+        ensureFeatureCharts(); var bins = (data && data.bins) || [], train = data && data.train ? data.train.hist : [], val = data && data.val ? data.val.hist : []
+        tabState.charts.featDist.clear()
+        tabState.charts.featDist.setOption({ ...baseChartOption(), xAxis: { ...axisCommon(), type: "category", data: bins.map(function (x) { return Number(x).toFixed(3) }) }, yAxis: { ...axisCommon(), type: "value", min: 0 }, legend: { top: 0, left: 0, itemWidth: 12, itemHeight: 10, textStyle: { color: "#b7c7d8", fontSize: 12 } }, series: [{ name: "train", type: "line", smooth: true, showSymbol: false, lineStyle: { width: 2.5, color: "#00ccff" }, areaStyle: { color: "rgba(0, 204, 255, 0.10)" }, data: train }, { name: "val", type: "line", smooth: true, showSymbol: false, lineStyle: { width: 2.5, color: "#86cfff" }, areaStyle: { color: "rgba(134, 207, 255, 0.08)" }, data: val }] }, true)
+      }
+
+      function _parseNum(x) { var n = Number(String(x || "").replace(/[^\d\.\-\+eE]/g, "")); return Number.isFinite(n) ? n : null }
+
+            // ----- 消融实验瀑布图（蓝渐变 #0066cc→#0099ff→#00ccff，条宽18px，发光阴影，条形方向区分正负） -----
+      function renderFeatAblationDelta(data) {
+        ensureFeatureCharts(); var rows = data && data.table && data.table.rows ? data.table.rows : [], header = data && data.table && data.table.header ? data.table.header : []
+        var deltaKey = header.find(function (h) { return h.indexOf("Δ") !== -1 }) || "Δ全46维", featKey = header.find(function (h) { return h.indexOf("特征") !== -1 }) || "特征"
+        var parsed = rows.filter(function (r) { return r && r[featKey] && r[deltaKey] && String(r[featKey]).indexOf("全46维") === -1 }).map(function (r) { return { feature: String(r[featKey]).replace(/\*\*/g, "").trim(), delta: _parseNum(r[deltaKey]) } }).filter(function (r) { return r.delta !== null })
+        var top = parsed.slice(0, 18).reverse(), y = top.map(function (d) { return d.feature }), x = top.map(function (d) { return d.delta })
+        tabState.charts.featAblation.clear()
+        tabState.charts.featAblation.setOption({
+          backgroundColor: "transparent", grid: { left: 220, right: 80, top: 34, bottom: 30, containLabel: true },
+          xAxis: { ...axisCommon(), type: "value" }, yAxis: { ...axisCommon(), type: "category", data: y, axisLabel: { color: "#c8d6e5", fontSize: 11 } },
+          tooltip: { trigger: "axis", backgroundColor: "rgba(9, 18, 30, 0.94)", borderColor: "rgba(0, 204, 255, 0.45)", borderWidth: 1, textStyle: { color: "#e0e6ed" }, axisPointer: { type: "line", lineStyle: { color: "rgba(51, 255, 255, 0.55)", width: 1 } } },
+          series: [{ type: "bar", barWidth: 18, barGap: "8px", data: x.map(function (v) { var pos = v > 0; return { value: v, itemStyle: { borderRadius: pos ? [0, 10, 10, 0] : [10, 0, 0, 10], color: pos ? new echarts.graphic.LinearGradient(1, 0, 0, 0, [{ offset: 0, color: "#0066cc" }, { offset: 0.5, color: "#0099ff" }, { offset: 1, color: "#00ccff" }]) : new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#0066cc" }, { offset: 0.5, color: "#0099ff" }, { offset: 1, color: "#00ccff" }]), shadowBlur: 10, shadowColor: "rgba(0, 153, 255, 0.28)" }, label: { show: true, position: pos ? "right" : "left", color: "#ffffff", fontSize: 11, formatter: function (p) { return fmtDec4(p.value) } } } }) }]
+        }, true)
+      }
+
+      // 加载特征分析标签页（首次切换时按需加载）
+      async function loadFeatureTab() { if (tabState.featLoaded) return; tabState.featLoaded = true; setTabStatus("featStatus", "正在加载特征分析数据…")
+        try { var r = await Promise.all([fetchJson("/api/features/importance"), fetchJson("/api/features/ablation")]), imp = r[0], abl = r[1]
+          document.getElementById("featKpiModel").textContent = imp && imp.source ? "step5_feature_ablation_report.md" : "--"
+          document.getElementById("featKpiModel").title = "step5_feature_ablation_report.md"
+          document.getElementById("featKpiTop1").textContent = imp && imp.items && imp.items[0] ? (imp.items[0].feature_cn || imp.items[0].feature) : "--"
+          document.getElementById("featKpiAblation").textContent = abl && abl.table && abl.table.rows ? fmtNumber(abl.table.rows.length, 0) : "--"
+          var sel = document.getElementById("featSelect"); sel.innerHTML = ""
+          ;((imp && imp.items) || []).slice(0, 80).forEach(function (it) { var o = document.createElement("option"); o.value = it.feature; o.textContent = it.feature_cn || it.feature; sel.appendChild(o) })
+          if (sel.options.length > 0) sel.value = sel.options[0].value
+          renderFeatImportance(imp); renderFeatAblationDelta(abl); setTabStatus("featStatus", "")
+          queryFeatureDistribution()  // 默认加载 Top1 特征的分布
+        } catch (e) { setTabStatus("featStatus", "特征分析数据加载失败\n错误详情：" + _formatFetchError(e, "请确保 step5_feature_ablation_report.md 文件存在于项目根目录")) } }
+
+      // 查询指定特征的 train/val 分布
+      async function queryFeatureDistribution() { var f = document.getElementById("featSelect").value; if (!f) { setTabStatus("featStatus", "无法获取 feature_name，请先确保 /api/features/importance 可用。"); return }
+        setTabStatus("featStatus", "特征分布数据加载中...")
+        try { var d = await fetchJson("/api/features/distribution", { feature_name: f }); renderFeatDist(d); setTabStatus("featStatus", "") } catch (e) { setTabStatus("featStatus", "特征分布数据加载失败\n错误详情：" + _formatFetchError(e, "请检查 cus_feat/art_feat/inter_feat 等特征文件是否存在")) } }
+
+      // ==================== 标签页切换 & 按钮事件绑定 ====================
+      document.querySelectorAll("#tabBar .tab-item").forEach(function (btn) { btn.addEventListener("click", async function () { var t = btn.dataset.tab; setActiveTab(t); if (t === "recall") await loadRecallTab(); if (t === "features") await loadFeatureTab() }) })
+      document.getElementById("recallUserBtn").addEventListener("click", queryRecallUserPath)
+      document.getElementById("featDistBtn").addEventListener("click", queryFeatureDistribution)
+
+      // 窗口 resize 时重绘所有已初始化的标签页图表
+      window.addEventListener("resize", function () { if (tabState.charts.recallChannels) tabState.charts.recallChannels.resize(); if (tabState.charts.recallSankey) tabState.charts.recallSankey.resize(); if (tabState.charts.featImportance) tabState.charts.featImportance.resize(); if (tabState.charts.featDist) tabState.charts.featDist.resize(); if (tabState.charts.featAblation) tabState.charts.featAblation.resize() })
+    </script>
+  </body>
+</html>
