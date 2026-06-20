@@ -1,0 +1,232 @@
+"""
+Step 5 Ensemble Infer (4-Model): lowlr + catboost + xgboost + nn 四模型集成推理
+================================================================================
+基于 step5_ensemble_infer_3model.py, 添加 NN MLP 作为第四个异构模型
+
+四模型等权平均:
+  - LightGBM LambdaRank (lowlr)
+  - CatBoost YetiRank (catboost)
+  - XGBoost rank:ndcg (xgboost)
+  - NN MLP + ListNet (nn)  ← 真正的异构: 神经网络 vs 决策树
+
+输入: model_lowlr.txt / model_catboost.cbm / model_xgboost.json / model_nn.pt / scaler_nn.pkl
+输出: submission_ensemble_4model.csv
+"""
+import sys, os
+sys.stdout.reconfigure(encoding='utf-8')
+os.environ["LIGHTGBM_VERBOSITY"] = "-1"
+
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+import pickle, gc, time, warnings
+from collections import defaultdict
+from catboost import CatBoost
+
+import torch
+import lightgbm as lgb
+
+from config import (
+    DATA_DIR, PROCESSED_DIR,
+    INFER_BATCH_SIZE,
+)
+from utils import timer
+
+# ---- 复用 NN 模型定义 ----
+import torch.nn as nn
+
+class RankingMLP(nn.Module):
+    def __init__(self, input_dim=23, hidden_dims=(128, 64, 32), dropout=0.2):
+        super().__init__()
+        layers = []
+        prev = input_dim
+        for h in hidden_dims:
+            layers.extend([
+                nn.Linear(prev, h),
+                nn.BatchNorm1d(h),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+            ])
+            prev = h
+        layers.append(nn.Linear(prev, 1))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.net(x)
+
+
+OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+warnings.filterwarnings("ignore")
+print("=" * 60)
+print("Step 5 Ensemble Infer (4-Model): lowlr + catboost + xgboost + nn")
+print(f"  device={device}")
+print("=" * 60)
+
+# ============================================================
+# 特征列 (23维)
+# ============================================================
+CUS_COLS_CLEAN = ['age', 'postal_le', 'R_days', 'n_unique_articles']
+ART_COLS_CLEAN = [
+    'popularity_score', 'price_log', 'sales_log',
+    'product_group_name_le', 'product_type_name_le',
+    'colour_group_name_le', 'index_name_le',
+]
+ART_COLS_CLEAN += [f'text_emb_{i}' for i in [0, 1, 6, 7, 15, 16, 18]]
+INTER_COLS_CLEAN = ['buy_count', 'last_buy_days', 'first_buy_days']
+CAND_COLS_CLEAN = ['cf_score', 'price_match']
+FEAT_COLS_CLEAN = CUS_COLS_CLEAN + ART_COLS_CLEAN + INTER_COLS_CLEAN + CAND_COLS_CLEAN
+
+from config import CUS_COLS, ART_COLS, INTER_COLS
+
+# ============================================================
+# 加载模型
+# ============================================================
+with timer("加载模型"):
+    model_lowlr    = lgb.Booster(model_file=f"{OUTPUT_DIR}/model_lowlr.txt")
+    model_catboost = CatBoost()
+    model_catboost.load_model(f"{OUTPUT_DIR}/model_catboost.cbm")
+    model_xgboost  = xgb.Booster()
+    model_xgboost.load_model(f"{OUTPUT_DIR}/model_xgboost.json")
+
+    # NN 模型
+    model_nn = RankingMLP(input_dim=len(FEAT_COLS_CLEAN)).to(device)
+    model_nn.load_state_dict(torch.load(f"{OUTPUT_DIR}/model_nn.pt", map_location=device))
+    model_nn.eval()
+    with open(f"{OUTPUT_DIR}/scaler_nn.pkl", "rb") as f:
+        scaler_nn = pickle.load(f)
+
+print(f"  lowlr + catboost + xgboost + nn (MLP ListNet) 加载完成")
+
+# ============================================================
+# 候选生成 & LTR构建 (推理模式)
+# ============================================================
+def generate_candidates(user_hist, item_sim, art_pop, customers, n_hist=12, n_pop=12):
+    pop_list = sorted(art_pop, key=lambda x: -art_pop[x])[:n_pop]
+    out = {}
+    for cid in customers:
+        cands = set()
+        for aid in user_hist.get(cid, [])[:n_hist]:
+            cands.add(aid)
+        for aid in user_hist.get(cid, [])[:5]:
+            if aid in item_sim:
+                for rel, _ in item_sim[aid][:10]:
+                    cands.add(rel)
+        for aid in pop_list:
+            cands.add(aid)
+        out[cid] = list(cands)
+    return out
+
+
+def build_ltr_data(candidates, labels, cus_feat_df, art_feat_df,
+                   inter_feat_df, item_sim, user_hist):
+    cf_map = {}
+    for cid in candidates:
+        scores = defaultdict(float)
+        for aid in user_hist.get(cid, [])[:5]:
+            if aid in item_sim:
+                for rel, sc in item_sim[aid][:10]:
+                    scores[rel] += sc
+        cf_map[cid] = dict(scores)
+
+    rows = []
+    for cid in candidates:
+        actual = labels.get(cid, set())
+        for aid in candidates[cid]:
+            rows.append((cid, aid, 1 if aid in actual else 0))
+    df = pd.DataFrame(rows, columns=["customer_id", "article_id", "label"])
+    del rows; gc.collect()
+
+    df = df.merge(cus_feat_df[CUS_COLS + ["customer_id"]], on="customer_id", how="left")
+    df = df.merge(art_feat_df[ART_COLS + ["article_id"]], on="article_id", how="left")
+    df = df.merge(inter_feat_df, on=["customer_id", "article_id"], how="left")
+
+    df["buy_count"] = df["buy_count"].fillna(0)
+    df["last_buy_days"] = df["last_buy_days"].fillna(999)
+    df["first_buy_days"] = df["first_buy_days"].fillna(999)
+
+    c_arr = df["customer_id"].values
+    a_arr = df["article_id"].values
+    df["cf_score"] = np.float32([
+        cf_map.get(c, {}).get(a, 0.0) for c, a in zip(c_arr, a_arr)
+    ])
+    df["price_match"] = (
+        -np.abs(df["avg_price"].values - df["avg_price_user"].values)
+    ).astype(np.float32)
+    del c_arr, a_arr, cf_map; gc.collect()
+
+    return df
+
+
+# ============================================================
+# 加载全量特征
+# ============================================================
+with timer("加载全量特征"):
+    cus_feat_full = pd.read_parquet(f"{PROCESSED_DIR}/cus_feat_full.parquet")
+    art_feat_full = pd.read_parquet(f"{PROCESSED_DIR}/art_feat_full.parquet")
+    inter_feat_full = pd.read_parquet(f"{PROCESSED_DIR}/inter_feat_full.parquet")
+    with open(f"{PROCESSED_DIR}/item_sim_full.pkl", "rb") as f:
+        item_sim_full = pickle.load(f)
+    with open(f"{PROCESSED_DIR}/user_hist_full.pkl", "rb") as f:
+        user_hist_full = pickle.load(f)
+
+art_pop_full = art_feat_full.set_index("article_id")["popularity_score"].to_dict()
+pop12_full = sorted(art_pop_full, key=lambda x: -art_pop_full[x])[:12]
+
+sub = pd.read_csv(f"{DATA_DIR}/sample_submission.csv")
+sub_cids = sub["customer_id"].tolist()
+
+known_users = set(user_hist_full.keys())
+sub_cold = [c for c in sub_cids if c not in known_users]
+print(f"  提交用户: {len(sub_cids):,}  冷启动: {len(sub_cold):,} ({len(sub_cold)/len(sub_cids)*100:.1f}%)")
+
+# ============================================================
+# 分批集成推理 (四模型等权平均)
+# ============================================================
+all_preds = {}
+with timer(f"分批集成推理 (batch={INFER_BATCH_SIZE})"):
+    for start in range(0, len(sub_cids), INFER_BATCH_SIZE):
+        batch_cids = sub_cids[start:start + INFER_BATCH_SIZE]
+        batch_num = start // INFER_BATCH_SIZE + 1
+
+        batch_cands = generate_candidates(user_hist_full, item_sim_full, art_pop_full, batch_cids)
+        inf_df = build_ltr_data(batch_cands, {}, cus_feat_full, art_feat_full,
+                                inter_feat_full, item_sim_full, user_hist_full)
+        for c in FEAT_COLS_CLEAN:
+            if inf_df[c].dtype == "float64":
+                inf_df[c] = inf_df[c].astype(np.float32)
+
+        X_inf = inf_df[FEAT_COLS_CLEAN].values
+
+        # 四个模型分别预测
+        s_lowlr = model_lowlr.predict(X_inf)
+        s_cat   = model_catboost.predict(X_inf)
+        dinf = xgb.DMatrix(X_inf)
+        s_xgb   = model_xgboost.predict(dinf)
+
+        # NN: 需要标准化
+        X_inf_scaled = scaler_nn.transform(X_inf.astype(np.float32))
+        with torch.no_grad():
+            s_nn = model_nn(torch.tensor(X_inf_scaled).to(device)).cpu().numpy().flatten()
+
+        # 四模型等权平均
+        inf_df["score"] = (np.float64(s_lowlr) + np.float64(s_cat) +
+                           np.float64(s_xgb) + np.float64(s_nn)) / 4.0
+
+        batch_preds = (
+            inf_df.sort_values(["customer_id", "score"], ascending=[True, False])
+            .groupby("customer_id").head(12)
+            .groupby("customer_id")["article_id"].apply(list).to_dict()
+        )
+        all_preds.update(batch_preds)
+        del inf_df, batch_cands, batch_preds, X_inf, dinf, X_inf_scaled; gc.collect()
+        print(f"  Batch {batch_num}: {len(batch_cids):,} 用户完成")
+
+sub["prediction"] = sub["customer_id"].map(
+    lambda x: " ".join(all_preds.get(x, pop12_full))
+)
+sub.to_csv(f"{OUTPUT_DIR}/submission_ensemble_4model.csv", index=False)
+print(f"\n提交已保存: {OUTPUT_DIR}/submission_ensemble_4model.csv  ({len(sub):,} 行)")
+print(f"\n完成!")
