@@ -17,8 +17,10 @@ build/
 *.pickle
 *.csv
 
-# Model output
-output/
+# Model output (忽略大文件, 保留小文件如模型txt、报告等)
+output/submission_*.csv
+output/*.model
+output/*.parquet
 
 # Environment
 .env

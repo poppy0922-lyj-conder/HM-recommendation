@@ -19,6 +19,11 @@ F:\HM-recommendation/
 ├── config.py                  # 全局配置
 ├── utils.py                   # 工具函数
 ├── requirements.txt
+├── output/                    # 模型与输出文件
+│   ├── model_item2vec.txt           LightGBM 模型
+│   ├── cv_results.csv               5 折 CV 结果
+│   ├── cv_report.txt                CV 稳定性报告
+│   └── cv_roc_curves.png            ROC 曲线
 │
 ├── history/                   # 历史改进代码
 │   ├── step5_lowlr.py             低学习率+多树 (lr=0.02, 2000轮)
