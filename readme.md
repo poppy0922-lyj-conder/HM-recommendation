@@ -9,6 +9,7 @@
 ```
 F:\HM-recommendation/
 ├── step5_item2vec.py          ← 最优模型 (56维: 23基线 + 32 a2v + 1 v2v_sim)
+├── step7_shap.py              # SHAP 模型可解释性分析
 ├── step1_load_data.py         # 数据加载与验证集划分
 ├── step2_features.py          # 特征工程 (5类 46维特征)
 ├── step3_baseline.py          # 基线模型评估 (流行度/Item-CF)
@@ -18,32 +19,31 @@ F:\HM-recommendation/
 ├── utils.py                   # 工具函数
 ├── requirements.txt
 │
-├── archive/
-│   ├── history/               # 历史改进代码
-│   │   ├── step5_lowlr.py             低学习率+多树 (lr=0.02, 2000轮)
-│   │   ├── step5_xgboost.py           XGBoost rank:ndcg
-│   │   ├── step5_catboost.py          CatBoost YetiRank
-│   │   ├── step5_xendcg.py            LightGBM rank_xendcg
-│   │   ├── step5_clean.py / round2    特征精简 (46→34→23)
-│   │   ├── step5_full_train.py        全量训练
-│   │   ├── step5_ensemble_infer*.py   多模型集成 (2/3/4模型, RRF, 权重搜索)
-│   │   ├── step5_ensemble_infer_4model_item2vec.py  含Item2Vec四模型集成
-│   │   ├── step5_nn.py / twotower.py  神经网络尝试
-│   │   ├── step5_two_stage.py         两阶段排序尝试
-│   │   ├── step5_expanded.py          多通道扩大召回
-│   │   └── step6_infer.py             旧版推理
-│   │
-│   ├── ablation/              # 消融实验
-│   │   ├── ablation_feature.py        特征消融
-│   │   ├── ablation_recall.py         召回通道消融
-│   │   ├── train_after_ablation.py    消融后训练 (23维)
-│   │   ├── step_neg_sampling.py       负采样训练 (1:5)
-│   │   └── step5_feature_ablation_report.md
-│   │
-│   └── dashboard/             # 数据看板 (队友贡献)
-│       ├── backend/
-│       ├── frontend/
-│       └── run_dashboard.bat
+├── history/                   # 历史改进代码
+│   ├── step5_lowlr.py             低学习率+多树 (lr=0.02, 2000轮)
+│   ├── step5_xgboost.py           XGBoost rank:ndcg
+│   ├── step5_catboost.py          CatBoost YetiRank
+│   ├── step5_xendcg.py            LightGBM rank_xendcg
+│   ├── step5_clean.py / round2    特征精简 (46→34→23)
+│   ├── step5_full_train.py        全量训练
+│   ├── step5_ensemble_infer*.py   多模型集成 (2/3/4模型, RRF, 权重搜索)
+│   ├── step5_ensemble_infer_4model_item2vec.py  含Item2Vec四模型集成
+│   ├── step5_nn.py / twotower.py  神经网络尝试
+│   ├── step5_two_stage.py         两阶段排序尝试
+│   ├── step5_expanded.py          多通道扩大召回
+│   └── step6_infer.py             旧版推理
+│
+├── ablation/                  # 消融实验
+│   ├── ablation_feature.py        特征消融
+│   ├── ablation_recall.py         召回通道消融
+│   ├── train_after_ablation.py    消融后训练 (23维)
+│   ├── step_neg_sampling.py       负采样训练 (1:5)
+│   └── step5_feature_ablation_report.md
+│
+└── dashboard/                 # 数据看板 (队友贡献)
+    ├── backend/
+    ├── frontend/
+    └── run_dashboard.bat
 ```
 
 ## 运行流程
