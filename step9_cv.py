@@ -41,6 +41,7 @@ import matplotlib.pyplot as plt
 from config import (
     DATA_DIR, PROCESSED_DIR, OUTPUT_DIR, LGB_PARAMS,
     VAL_DAYS, INFER_BATCH_SIZE, SEED,
+    CUS_COLS, ART_COLS, INTER_COLS,
 )
 from utils import timer, mapk, set_seed
 
